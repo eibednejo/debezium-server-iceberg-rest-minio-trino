@@ -17,10 +17,6 @@ services:
       - AWS_ACCESS_KEY_ID=demo
       - AWS_SECRET_ACCESS_KEY=password
       - AWS_REGION=us-east-1
-#    links:
-#      - jdbccatalog
-#      - minio
-#      - postgresqlsourcedb
   postgresqlsourcedb:
     image: debezium/example-postgres:2.5
     container_name: postgresql-source-db
@@ -34,17 +30,6 @@ services:
       iceberg_net:
     ports:
       - "5432:5432"
-  # jdbccatalog:
-  #   image: postgres:14-alpine
-  #   container_name: iceberg-jdbc-catalog
-  #   networks:
-  #     iceberg_net:
-  #   ports:
-  #     - "5433:5432"
-  #   environment:
-  #     - POSTGRES_DB=test
-  #     - POSTGRES_USER=testuser
-  #     - POSTGRES_PASSWORD=testpass
   minio:
     image: minio/minio
     container_name: minio
@@ -80,7 +65,7 @@ services:
       exit 0;
       "
   iceberg-rest:
-    image: apache/iceberg-rest-fixture:latest
+    image: tabulario/iceberg-rest
     container_name: iceberg-rest
     ports:
       - "8181:8181"
@@ -91,33 +76,32 @@ services:
       - CATALOG_WAREHOUSE=s3a://warehouse
       - CATALOG_IO__IMPL=org.apache.iceberg.io.ResolvingFileIO
       - CATALOG_S3_ENDPOINT=http://minio:9000
+      - CATALOG_URI=jdbc:postgresql://postgres/demo_catalog
+      - CATALOG_JDBC_USER=admin
+      - CATALOG_JDBC_PASSWORD=password
     networks:
       iceberg_net:
-    # depends_on:
-    #   iceberg-pg-catalog:
-    #     condition: service_healthy
-    #     restart: true
-  # iceberg-pg-catalog:
-  #   image: postgres:14-alpine
-  #   container_name: iceberg_pg_catalog
-  #   environment:
-  #     - POSTGRES_USER=iceberg
-  #     - POSTGRES_PASSWORD=iceberg
-  #     - POSTGRES_DB=iceberg-catalog
-  #   healthcheck:
-  #     test:
-  #       - CMD
-  #       - pg_isready
-  #       - -U
-  #       - iceberg
-  #     interval: 5s
-  #     retries: 5
-  #   ports:
-  #     - 5433:5432
-  #   volumes:
-  #     - iceberg_pg_catalog_data:/var/lib/postgresql/data
-  #   networks:
-  #     iceberg_net:
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: demo_catalog
+      POSTGRES_HOST_AUTH_METHOD: md5
+    networks:
+      iceberg_net:
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d demo_catalog"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
   trino:
     image: trinodb/trino:468
     container_name: trino
@@ -140,4 +124,4 @@ networks:
     name: icebergnet
 volumes:
   minio_data: null
-  iceberg_pg_catalog_data: null
+  postgres_data: null
